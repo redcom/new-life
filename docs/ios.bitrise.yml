@@ -1,0 +1,197 @@
+---
+format_version: '5'
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: fastlane
+app:
+  envs:
+  - FASTLANE_XCODE_LIST_TIMEOUT: '120'
+    opts:
+      is_expand: false
+  - opts:
+      is_expand: false
+    FASTLANE_WORK_DIR: ios
+  - opts:
+      is_expand: false
+    FASTLANE_LANE: ios test
+  - opts:
+      is_expand: false
+    GITHUB_USER_EMAIL: redcom@gmail.com
+  - opts:
+      is_expand: false
+    GITHUB_USER_NAME: CI-test
+  - opts:
+      is_expand: false
+    TEST_PLATFORM: iOS
+trigger_map:
+- push_branch: master
+  workflow: primary-master
+- push_branch: feature/*
+  workflow: test-branches
+- tag: "*"
+  workflow: release-tag
+workflows:
+  primary-master:
+    steps:
+    - activate-ssh-key@3.1.1:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - script@1.1.5:
+        inputs:
+        - content: |
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            # write your script here
+
+            # make sure we communicate with GitHub.com. Also reduce lookup time
+            ssh-keyscan -t rsa GitHub.com >> ~/.ssh/known_hosts
+
+            # GITHUB impersonate user
+            git config --global user.name $GITHUB_USER_NAME
+            git config --global user.email $GITHUB_USER_EMAIL
+        title: Github configuration for user
+    - git-clone@4.0.11: {}
+    - install-react-native@0.9.1: {}
+    - yarn: {}
+    - cache-pull@2.0.1: {}
+    - fastlane@2.3.12:
+        inputs:
+        - work_dir: "$FASTLANE_WORK_DIR"
+        - lane: test
+        title: fastlane build test zip
+    - script@1.1.5:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            # write your script here
+            echo "Hello Boys I am starting tests!"
+            yarn test:e2e:saucelabs
+        title: Run tests on Saucelabs
+    - fastlane@2.3.12:
+        inputs:
+        - lane: hockeyApp --env stage release:beta
+        - work_dir: "$FASTLANE_WORK_DIR"
+        title: fastlane deploy alpha to hokeyapp
+    - script@1.1.5:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            git push origin HEAD:$BITRISE_GIT_BRANCH
+        title: update repo with build number
+    - cache-push@2.0.5: {}
+  test-branches:
+    steps:
+    - activate-ssh-key@3.1.1:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - script@1.1.5:
+        inputs:
+        - content: |
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            # make sure we communicate with GitHub.com. Also reduce lookup time
+            ssh-keyscan -t rsa GitHub.com >> ~/.ssh/known_hosts
+
+            # GITHUB impersonate user
+            git config --global user.name $GITHUB_USER_NAME
+            git config --global user.email $GITHUB_USER_EMAIL
+        title: Github configuration for user
+    - git-clone@4.0.11: {}
+    - cache-pull@2.0.1: {}
+    - install-react-native@0.9.1: {}
+    - yarn: {}
+    - fastlane@2.3.12:
+        inputs:
+        - work_dir: "$FASTLANE_WORK_DIR"
+        - lane: test
+        title: fastlane build test zip
+    - script@1.1.5:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            # write your script here
+            echo "Hello Boys I am starting tests!"
+
+            yarn test:e2e:saucelabs
+        title: Run tests on Saucelabs
+    - cache-push@2.0.5: {}
+  release-tag:
+    steps:
+    - activate-ssh-key@3.1.1:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - script@1.1.5:
+        inputs:
+        - content: |
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            # write your script here
+
+            # make sure we communicate with GitHub.com. Also reduce lookup time
+            ssh-keyscan -t rsa GitHub.com >> ~/.ssh/known_hosts
+
+            # GITHUB impersonate user
+            git config --global user.name $GITHUB_USER_NAME
+            git config --global user.email $GITHUB_USER_EMAIL
+        title: Github configuration for user
+    - git-clone@4.0.11: {}
+    - install-react-native@0.9.1: {}
+    - yarn: {}
+    - fastlane@2.3.12:
+        inputs:
+        - work_dir: "$FASTLANE_WORK_DIR"
+        - lane: test
+        title: fastlane build test zip
+    - script@1.1.5:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            # write your script here
+            echo "Hello Boys I am starting tests!"
+
+            yarn test:e2e:saucelabs
+        title: Run tests on Saucelabs
+    - fastlane@2.3.12:
+        inputs:
+        - lane: release
+        - work_dir: "$FASTLANE_WORK_DIR"
+        title: fastlane deploy hockeyApp
+    - script@1.1.5:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            git push origin HEAD:$BITRISE_GIT_BRANCH
+        title: update repo with build number

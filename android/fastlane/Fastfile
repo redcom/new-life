@@ -1,0 +1,91 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:android)
+
+commit_sha = sh("git rev-parse --short=10 HEAD")
+change_log=`git log -10 --pretty=oneline`
+# environment specific
+
+HOCKEY_APP_TOKEN = ENV['HOCKEY_APP_TOKEN']
+SAUCELABS_USER = ENV['SAUCELABS_USER']
+SAUCELABS_TOKEN = ENV['SAUCELABS_TOKEN']
+
+# app specific
+APK_PATH=ENV['APK_PATH']
+BUILD_TYPE=ENV['BUILD_TYPE']
+
+platform :android do
+
+  desc "Create APK and upload artifact for testing"
+  lane :test do
+    version_code = increment_version_code(
+        gradle_file_path: "./app/build.gradle"
+    )
+
+    # Documentation: https://docs.fastlane.tools/actions/gradle/#gradle
+    gradle(
+        task: "clean"
+    )
+    gradle(
+        task: "assemble",
+        build_type: "#{BUILD_TYPE}"
+    )
+
+    sh("curl -u #{SAUCELABS_USER}:#{SAUCELABS_TOKEN} -X POST -H \"Content-Type: application/octet-stream\" --data-binary @../#{APK_PATH} \"https://saucelabs.com/rest/v1/storage/#{SAUCELABS_USER}/android.apk?overwrite=true\"")
+  end
+
+  desc "Deploy green build of android version to HockeyApp"
+  desc "This will also make sure the profile is up to date and code is signed"
+  lane :deploy do |options|
+    # documentation: https://docs.fastlane.tools/actions/hockey/#hockey
+
+    # get the release type based on relese option or defaults to beta
+    case options[:release]
+    when "alpha"
+      release_type="2"
+    when "beta"
+      release_type="0"
+    when "store"
+      release_type="1"
+    else
+      release_type="0"
+    end
+
+    hockey(
+      apk: "#{APK_PATH}",
+      api_token: "#{HOCKEY_APP_TOKEN}",
+      create_update: false,
+      commit_sha: "#{commit_sha}",
+      mandatory: "1",
+      notes: "#{change_log}",
+      notify: "1",
+      release_type: "#{release_type}",
+      strategy: "replace"
+    )
+
+    git_commit(
+        path: "./app/build.gradle",
+        message: "Fastlane ANDROID: Released new build #{commit_sha} [ci skip]"
+    )
+  end
+
+  desc "Deploy a new version to the Google Play"
+  lane :deploy do
+    gradle(task: "clean assembleRelease")
+    upload_to_play_store
+  end
+
+end

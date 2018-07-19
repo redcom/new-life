@@ -1,0 +1,2 @@
+Device ID	Device Name
+1a9b92edefa8e7ccecbbe10386761d773bfcf708	RazvanIPhoneX

@@ -1,0 +1,120 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:ios)
+
+platform :ios do
+  commit_sha = sh("git rev-parse --short=10 HEAD")
+  change_log=`git log -10 --pretty=oneline`
+
+# environment specific
+  HOCKEY_APP_TOKEN = ENV['HOCKEY_APP_TOKEN']
+  SAUCELABS_USER = ENV['SAUCELABS_USER']
+  SAUCELABS_TOKEN = ENV['SAUCELABS_TOKEN']
+
+# app specific
+  BUILD_TYPE=ENV['BUILD_TYPE']
+  PACKAGE_NAME=ENV['PACKAGE_NAME']
+  BUNDLE_ID=ENV['IOS_BUILD_ID']
+  SCHEME_NAME=ENV['IOS_SCHEME_NAME']
+  DSYM_NAME=ENV['DSYM_NAME']
+  IOS_SDK=ENV['IOS_SDK']
+
+  desc "Create zip to execute tests"
+  lane :test do
+    cocoapods
+    tmpFolder="#{ENV['PWD']}" #GIT root folder
+    sh("echo #{tmpFolder}")
+    sh("xcodebuild clean build \
+        -workspace ../#{SCHEME_NAME}.xcworkspace \
+        -configuration #{BUILD_TYPE} \
+        -scheme #{SCHEME_NAME} \
+        -sdk #{IOS_SDK} \
+        SYMROOT=#{tmpFolder}/build")
+    sh("echo here: #{ENV['PWD']}")
+
+    # make zip to upload to saucelabs
+    sh("pushd #{tmpFolder}/build/#{BUILD_TYPE}-iphonesimulator && zip -0 -r #{tmpFolder}/iphone.zip ./#{SCHEME_NAME}.app && popd")
+
+    # upload to saucelabe for testing
+    sh("curl -u #{SAUCELABS_USER}:#{SAUCELABS_TOKEN} -X POST -H \"Content-Type: application/octet-stream\" --data-binary @#{tmpFolder}/iphone.zip \"https://saucelabs.com/rest/v1/storage/#{SAUCELABS_USER}/iphone.zip?overwrite=true\"")
+  end
+
+  desc "build ipa and upload artifact to hockeyapp"
+  lane :deploy do |options|
+
+    # get the release type based on relese option or defaults to beta
+    case options[:release]
+    when "alpha"
+      release_type="2"
+    when "beta"
+      release_type="0"
+    when "store"
+      release_type="1"
+    else
+      release_type="0"
+    end
+
+
+    MATCH_TYPE=ENV['MATCH_TYPE']
+    EXPORT_METHOD=ENV['IOS_EXPORT_METHOD']
+    CODESIGNING_IDENTITY=ENV['IOS_CODESIGNING_IDENTITY']
+
+    increment_build_number
+    register_devices(devices_file: "./registered_devices.txt")
+    match(type: "#{MATCH_TYPE}", force_for_new_devices: true) # more information: https://codesigning.guide && https://docs.fastlane.tools/actions/match/
+    cocoapods
+
+    # The apps have to mannually created in hockey app
+    # documentation: https://docs.fastlane.tools/actions/hockey/#hockey
+    build_ios_app(
+        workspace: "#{SCHEME_NAME}.xcworkspace",
+        scheme: "#{SCHEME_NAME}",
+        configuration: "#{BUILD_TYPE}",
+        output_directory: ".",
+        output_name: "#{PACKAGE_NAME}",
+        export_method: "#{EXPORT_METHOD}",
+        codesigning_identity: "#{CODESIGNING_IDENTITY}",
+        clean: true,
+        silent: true,
+    ) # Build your app - more options available
+    hockey(
+      api_token: "#{HOCKEY_APP_TOKEN}",
+      commit_sha: "#{commit_sha}",
+      ipa: "#{PACKAGE_NAME}",
+      dsym: "#{DSYM_NAME}",
+      mandatory: "1",
+      notes: "#{change_log}",
+      notify: "1",
+      release_type: "#{release_type}", # Release type of the app: "0" = Beta (default), "1" = Store, "2" = Alpha, "3" = Enterprise
+      strategy: "replace",
+    )
+
+    clean_build_artifacts
+
+    commit_version_bump(
+      message: "Yara:Startapp iOS: Released new build #{lane_context[SharedValues::BUILD_NUMBER]} SHA #{commit_sha} to Hockeyapp [ci skip]",
+      xcodeproj: "./#{SCHEME_NAME}.xcodeproj",
+      force: true
+    )
+  end
+
+  desc "Push a new release build to the App Store"
+  lane :release do
+    increment_build_number(xcodeproj: "fresh.xcodeproj")
+    build_app(scheme: "#{SCHEME_NAME}")
+    upload_to_app_store
+  end
+end

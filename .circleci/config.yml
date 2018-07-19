@@ -1,0 +1,310 @@
+version: 2
+jobs:
+  node:
+    working_directory: ~/onfield-startup
+    docker:
+      - image: circleci/node:8
+    steps:
+      - checkout
+
+      - restore_cache:
+          key: yarn-v1-{{ checksum "yarn.lock" }}-{{ arch }}
+
+      - restore_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+
+      - run: yarn install
+
+      - save_cache:
+          key: yarn-v1-{{ checksum "yarn.lock" }}-{{ arch }}
+          paths:
+            - ~/.cache/yarn
+
+      - save_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+          paths:
+            - node_modules
+
+      - persist_to_workspace:
+          root: ~/onfield-startup
+          paths:
+            - node_modules
+
+  # build and test on saucelabb
+  android:
+    working_directory: ~/onfield-startup/android
+    docker:
+      - image: circleci/android:api-27-node8-alpha
+    steps:
+      - checkout:
+          path: ~/onfield-startup
+
+      - attach_workspace:
+          at: ~/onfield-startup
+
+      - restore_cache:
+          key: bundle-v1-{{ checksum "Gemfile.lock" }}-{{ arch }}
+
+      - run: bundle install
+
+      - save_cache:
+          key: bundle-v1-{{ checksum "Gemfile.lock" }}-{{ arch }}
+          paths:
+            - vendor/bundle
+
+      - run:
+          name: fastlane build and upload apk for testing
+          command: |
+            echo $ANDROID_GOOGLE_JSON_KEY > ./secret/google-json-key.json
+            bundle exec fastlane test
+
+      - run:
+          name: Android saucelabs test
+          command: TEST_PLATFORM=Android yarn test:e2e:saucelabs
+          working_directory: ~/onfield-startup
+
+  # build APK and deploy for beta testers with production environment
+  android_alpha:
+    working_directory: ~/onfield-startup/android
+    docker:
+      - image: circleci/android:api-27-node8-alpha
+    steps:
+      - checkout:
+          path: ~/onfield-startup
+
+      - attach_workspace:
+          at: ~/onfield-startup
+
+      - restore_cache:
+          key: bundle-v1-{{ checksum "Gemfile.lock" }}-{{ arch }}
+
+      - run: bundle install
+
+      - save_cache:
+          key: bundle-v1-{{ checksum "Gemfile.lock" }}-{{ arch }}
+          paths:
+            - vendor/bundle
+
+      - run:
+          name: fastlane build and release beta
+          command: |
+            echo $ANDROID_GOOGLE_JSON_KEY > ./secret/google-json-key.json
+            bundle exec fastlane deploy --env production release:alpha
+
+  # build APK and deploy for beta testers with stage environment
+  android_beta:
+    working_directory: ~/onfield-startup/android
+    docker:
+      - image: circleci/android:api-27-node8-alpha
+    steps:
+      - checkout:
+          path: ~/onfield-startup
+
+      - attach_workspace:
+          at: ~/onfield-startup
+
+      - restore_cache:
+          key: bundle-v1-{{ checksum "Gemfile.lock" }}-{{ arch }}
+
+      - run: bundle install
+
+      - save_cache:
+          key: bundle-v1-{{ checksum "Gemfile.lock" }}-{{ arch }}
+          paths:
+            - vendor/bundle
+
+      - run:
+          name: fastlane build and release beta
+          command: |
+            echo $ANDROID_GOOGLE_JSON_KEY > ./secret/google-json-key.json
+            bundle exec fastlane deploy --env stage release:beta
+
+
+  # build and test on saucelabd
+  ios:
+    macos:
+      xcode: "9.0"
+    working_directory: ~/onfield-startup
+
+    # use a --login shell so our "set Ruby version" command gets picked up for later steps
+    shell: /bin/bash --login -o pipefail
+
+    steps:
+      - checkout
+
+      - run:
+          name: set Ruby version
+          command:  echo "ruby-2.4" > ~/.ruby-version
+
+      - restore_cache:
+          key: yarn-v1-{{ checksum "yarn.lock" }}-{{ arch }}
+
+      - restore_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+
+      # not using a workspace here as Node and Yarn versions
+      # differ between our macOS executor image and the Docker containers above
+      - run: yarn install
+
+      - save_cache:
+          key: yarn-v1-{{ checksum "yarn.lock" }}-{{ arch }}
+          paths:
+            - ~/.cache/yarn
+
+      - save_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+          paths:
+            - node_modules
+
+      - restore_cache:
+          key: bundle-v1-{{ checksum "ios/Gemfile.lock" }}-{{ arch }}
+
+      - run:
+          command: bundle install
+          working_directory: ios
+
+      - save_cache:
+          key: bundle-v1-{{ checksum "ios/Gemfile.lock" }}-{{ arch }}
+          paths:
+            - vendor/bundle
+
+      - run:
+          name: Build testing payload
+          command: bundle exec fastlane test
+          working_directory: ios
+
+      - run:
+          name: Test on saucelabs
+          command: TEST_PLATFORM=iOS yarn test:e2e:saucelabs
+          working_directory: ~/onfield-startup
+
+
+  # build and deploy IPA for beta tester with stage environment
+  ios_beta:
+    macos:
+      xcode: "9.0"
+    working_directory: ~/onfield-startup
+
+    # use a --login shell so our "set Ruby version" command gets picked up for later steps
+    shell: /bin/bash --login -o pipefail
+
+    steps:
+      - checkout
+
+      - run:
+          name: set Ruby version
+          command:  echo "ruby-2.4" > ~/.ruby-version
+
+      - restore_cache:
+          key: yarn-v1-{{ checksum "yarn.lock" }}-{{ arch }}
+
+      - restore_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+
+      # not using a workspace here as Node and Yarn versions
+      # differ between our macOS executor image and the Docker containers above
+      - run: yarn install
+
+      - save_cache:
+          key: yarn-v1-{{ checksum "yarn.lock" }}-{{ arch }}
+          paths:
+            - ~/.cache/yarn
+
+      - save_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+          paths:
+            - node_modules
+
+      - restore_cache:
+          key: bundle-v1-{{ checksum "ios/Gemfile.lock" }}-{{ arch }}
+
+      - run:
+          command: bundle install
+          working_directory: ios
+
+      - save_cache:
+          key: bundle-v1-{{ checksum "ios/Gemfile.lock" }}-{{ arch }}
+          paths:
+            - vendor/bundle
+
+      - run:
+          name: Build iOS beta
+          command: bundle exec fastlane deploy --env stage release:beta
+          working_directory: ios
+
+  # build and deploy for alpha tester with production environment
+  ios_alpha:
+    macos:
+      xcode: "9.0"
+    working_directory: ~/onfield-startup
+
+    # use a --login shell so our "set Ruby version" command gets picked up for later steps
+    shell: /bin/bash --login -o pipefail
+
+    steps:
+      - checkout
+
+      - run:
+          name: set Ruby version
+          command:  echo "ruby-2.4" > ~/.ruby-version
+
+      - restore_cache:
+          key: yarn-v1-{{ checksum "yarn.lock" }}-{{ arch }}
+
+      - restore_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+
+      # not using a workspace here as Node and Yarn versions
+      # differ between our macOS executor image and the Docker containers above
+      - run: yarn install
+
+      - save_cache:
+          key: yarn-v1-{{ checksum "yarn.lock" }}-{{ arch }}
+          paths:
+            - ~/.cache/yarn
+
+      - save_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+          paths:
+            - node_modules
+
+      - restore_cache:
+          key: bundle-v1-{{ checksum "ios/Gemfile.lock" }}-{{ arch }}
+
+      - run:
+          command: bundle install
+          working_directory: ios
+
+      - save_cache:
+          key: bundle-v1-{{ checksum "ios/Gemfile.lock" }}-{{ arch }}
+          paths:
+            - vendor/bundle
+
+      - run:
+          name: Build iOS alpha
+          command: bundle exec fastlane deploy --env production release:alpha
+          working_directory: ios
+
+workflows:
+  version: 2
+  node-android-ios:
+    jobs:
+      - node
+      - android:
+          requires:
+            - node
+      - ios:
+          requires:
+            - node
+      # - android_beta:
+      #     requires:
+      #       - android
+      # - android_alpha:
+      #     requires:
+      #       - android_beta
+      # - ios_beta:
+      #     requires:
+      #       - ios
+      # - ios_alpha:
+      #     requires:
+      #       - ios_beta

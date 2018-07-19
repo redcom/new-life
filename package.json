@@ -1,0 +1,48 @@
+{
+  "name": "ReactFrontendTest",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "node node_modules/react-native/local-cli/cli.js start",
+    "run:android": "react-native run-android",
+    "build:ios": "react-native run-ios --configuration Release",
+    "build:android": "cd android && ./gradlew assembleRelease",
+    "start:appium": "appium",
+    "ios": "react-native run-ios",
+    "android": "react-native run-android",
+    "lint": "eslint ./src --quiet --fix --cache",
+    "test": "jest",
+    "test:e2e": "jest --testMatch=\"**/*e2e.js\"",
+    "test:e2e:local": "APPIUM_ENV=local yarn test:e2e",
+    "test:e2e:saucelabs": "APPIUM_ENV=saucelabs yarn test:e2e"
+  },
+  "dependencies": {
+    "react": "16.4.1",
+    "react-native": "0.56.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.0.0-beta.47",
+    "appium": "^1.8.1",
+    "archiver": "^2.1.1",
+    "babel-core": "^7.0.0-beta.47",
+    "babel-eslint": "^8.2.6",
+    "babel-jest": "23.2.0",
+    "babel-preset-react-native": "^5.0.1",
+    "eslint": "^5.1.0",
+    "eslint-config-prettier": "^2.9.0",
+    "eslint-plugin-prettier": "^2.6.2",
+    "eslint-plugin-react": "^7.10.0",
+    "eslint-plugin-react-native": "^3.2.1",
+    "jest": "23.3.0",
+    "prettier": "^1.13.7",
+    "react-test-renderer": "16.4.1",
+    "request": "^2.87.0",
+    "wd": "^1.10.1"
+  },
+  "jest": {
+    "preset": "react-native",
+    "transform": {
+      "^.+\\.js$": "<rootDir>/node_modules/react-native/jest/preprocessor.js"
+    }
+  }
+}
